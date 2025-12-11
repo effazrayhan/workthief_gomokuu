@@ -1,4 +1,4 @@
-# WrokgThief - Gomoku
+# WorkThief - Gomoku
 
 <p>A simple <b>"five in a row"</b> type game known as Gomoku. It is typically played in a <b>15 X 15</b> board, but for this project we are going to make it in a <b>10 X 10</b> board.</p>
 
