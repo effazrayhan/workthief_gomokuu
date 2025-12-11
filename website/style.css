@@ -1,0 +1,166 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+:root {
+  --background: #131314;
+  --foreground: #f1f1f1cc;
+  --accent: #d85f3c;
+}
+
+body {
+  margin: 0;
+  font-family: 'Press Start 2P', cursive;
+  background: var(--background);
+  color: var(--foreground);
+  animation: fadeInBody 1s ease-in;
+}
+
+@keyframes fadeInBody {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+main {
+  min-height: 100vh;
+}
+
+header {
+  background-color: var(--accent);
+  padding: 1rem;
+  animation: slideDown 0.8s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+nav .logo {
+  font-family: 'Press Start 2P', cursive;
+  font-size: 1.25rem;
+}
+
+nav ul {
+  list-style: none;
+  display: flex;
+  gap: 1rem;
+}
+
+nav ul li a {
+  color: white;
+  text-decoration: none;
+  font-weight: bold;
+  font-size: .8rem;
+  position: relative;
+  transition: transform 0.2s ease;
+}
+
+nav ul li a:hover {
+  transform: translateY(-2px);
+  animation: bounce 0.3s ease;
+}
+
+@keyframes bounce {
+  0% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem;
+  /* text-align: center; */
+  animation: fadeUp 1s ease-in;
+}
+
+@keyframes fadeUp {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.hero h1 {
+  font-family: 'Press Start 2P', cursive;
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  color: var(--accent);
+  animation: flicker 2s infinite;
+}
+
+@keyframes flicker {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.hero p {
+  font-size: 1rem;
+  margin-bottom: 2rem;
+}
+
+.hero-image img {
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.03);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+footer {
+  text-align: center;
+  padding: 1rem;
+  background-color: #1a1a2e;
+  font-size: 0.9rem;
+  animation: fadeUp 1s ease-in;
+}
