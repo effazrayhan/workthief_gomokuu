@@ -13,7 +13,8 @@ enum class GameState
     PAUSED
 };
 
-const int BOARD_SIZE = 15;
+
+const int BOARD_SIZE = 10;
 
 struct Button
 {
