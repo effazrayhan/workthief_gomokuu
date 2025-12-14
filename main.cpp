@@ -69,35 +69,41 @@ struct Button
 };
 
 // Transposition table for move caching
-struct TranspositionTable {
+struct TranspositionTable
+{
     unordered_map<string, int> cache;
-    
-    string boardToKey(const vector<int>& board) const {
+
+    string boardToKey(const vector<int> &board) const
+    {
         return string(board.begin(), board.end());
     }
-    
-    bool contains(const vector<int>& board) const {
+
+    bool contains(const vector<int> &board) const
+    {
         return cache.find(boardToKey(board)) != cache.end();
     }
-    
-    int get(const vector<int>& board) const {
+
+    int get(const vector<int> &board) const
+    {
         auto it = cache.find(boardToKey(board));
         return it != cache.end() ? it->second : 0;
     }
-    
-    void set(const vector<int>& board, int value) {
+
+    void set(const vector<int> &board, int value)
+    {
         cache[boardToKey(board)] = value;
     }
-    
-    void clear() {
+
+    void clear()
+    {
         cache.clear();
     }
 };
 
 int main()
 {
-    sf::RenderWindow window(sf::VideoMode(winW, winH), "Gomoku - WorkThief");
-    window.setFramerateLimit(60);
+    sf::RenderWindow window(sf::VideoMode(winW, winH), "Gomoku - WorkThief", sf::Style::Titlebar | sf::Style::Close);
+    window.setFramerateLimit(120);
     window.setVerticalSyncEnabled(true);
     window.setPosition(sf::Vector2i(sf::VideoMode::getDesktopMode().width / 2u - winW / 2, sf::VideoMode::getDesktopMode().height / 2u - winH / 2));
 
@@ -139,7 +145,6 @@ int main()
         exitBtn.rect.setSize({240.0f, 50.0f});
         exitBtn.rect.setFillColor(sf::Color(100, 100, 140));
     }
-
 
     // Coin selection buttons
     Button whiteBtn, blackBtn, backBtn;
@@ -196,23 +201,24 @@ int main()
     const int MAX_DEPTH = 4;
     Cell winner = CELL_EMPTY;
     bool gameEnded = false;
-    
+
     // Performance optimization: Transposition table
     TranspositionTable tt;
-    
+
     // random generator for computer moves
     random_device rd;
     mt19937 rng(rd());
 
     // helper lambdas
-    auto index = [&](int r, int c) { return r * BOARD_SIZE + c; };
+    auto index = [&](int r, int c)
+    { return r * BOARD_SIZE + c; };
 
     auto resetBoard = [&]()
-    { 
+    {
         fill(board.begin(), board.end(), CELL_EMPTY);
         winner = CELL_EMPTY;
         gameEnded = false;
-        playerTurn = true;
+        // Don't reset playerTurn here - let caller manage it
         tt.clear(); // Clear transposition table
     };
 
@@ -230,57 +236,78 @@ int main()
     };
 
     // OPTIMIZED: Fast winning check
-    auto checkWin = [&](const vector<int>& boardState, Cell player) -> bool
+    auto checkWin = [&](const vector<int> &boardState, Cell player) -> bool
     {
         // Check all directions efficiently
         for (int r = 0; r < BOARD_SIZE; ++r)
         {
             for (int c = 0; c < BOARD_SIZE; ++c)
             {
-                if (boardState[index(r, c)] != player) continue;
-                
+                if (boardState[index(r, c)] != player)
+                    continue;
+
                 // Check horizontal (right only)
                 if (c <= BOARD_SIZE - WIN_LENGTH)
                 {
                     bool win = true;
                     for (int i = 1; i < WIN_LENGTH; ++i)
                     {
-                        if (boardState[index(r, c + i)] != player) { win = false; break; }
+                        if (boardState[index(r, c + i)] != player)
+                        {
+                            win = false;
+                            break;
+                        }
                     }
-                    if (win) return true;
+                    if (win)
+                        return true;
                 }
-                
+
                 // Check vertical (down only)
                 if (r <= BOARD_SIZE - WIN_LENGTH)
                 {
                     bool win = true;
                     for (int i = 1; i < WIN_LENGTH; ++i)
                     {
-                        if (boardState[index(r + i, c)] != player) { win = false; break; }
+                        if (boardState[index(r + i, c)] != player)
+                        {
+                            win = false;
+                            break;
+                        }
                     }
-                    if (win) return true;
+                    if (win)
+                        return true;
                 }
-                
+
                 // Check diagonal (down-right only)
                 if (r <= BOARD_SIZE - WIN_LENGTH && c <= BOARD_SIZE - WIN_LENGTH)
                 {
                     bool win = true;
                     for (int i = 1; i < WIN_LENGTH; ++i)
                     {
-                        if (boardState[index(r + i, c + i)] != player) { win = false; break; }
+                        if (boardState[index(r + i, c + i)] != player)
+                        {
+                            win = false;
+                            break;
+                        }
                     }
-                    if (win) return true;
+                    if (win)
+                        return true;
                 }
-                
+
                 // Check anti-diagonal (down-left only)
                 if (r <= BOARD_SIZE - WIN_LENGTH && c >= WIN_LENGTH - 1)
                 {
                     bool win = true;
                     for (int i = 1; i < WIN_LENGTH; ++i)
                     {
-                        if (boardState[index(r + i, c - i)] != player) { win = false; break; }
+                        if (boardState[index(r + i, c - i)] != player)
+                        {
+                            win = false;
+                            break;
+                        }
                     }
-                    if (win) return true;
+                    if (win)
+                        return true;
                 }
             }
         }
@@ -296,27 +323,31 @@ int main()
     };
 
     // OPTIMIZED: Generate smart candidate moves only
-    auto generateCandidateMoves = [&](const vector<int>& boardState) -> vector<pair<int, int>>
+    auto generateCandidateMoves = [&](const vector<int> &boardState) -> vector<pair<int, int>>
     {
         vector<pair<int, int>> moves;
-        
+
         // If board is empty, start with center
         bool hasPieces = false;
         for (int cell : boardState)
         {
-            if (cell != CELL_EMPTY) { hasPieces = true; break; }
+            if (cell != CELL_EMPTY)
+            {
+                hasPieces = true;
+                break;
+            }
         }
-        
+
         if (!hasPieces)
         {
             int center = BOARD_SIZE / 2;
             moves.push_back({center, center});
             return moves;
         }
-        
+
         // Only consider moves near existing pieces
         vector<vector<bool>> considered(BOARD_SIZE, vector<bool>(BOARD_SIZE, false));
-        
+
         for (int r = 0; r < BOARD_SIZE; ++r)
         {
             for (int c = 0; c < BOARD_SIZE; ++c)
@@ -342,7 +373,7 @@ int main()
                 }
             }
         }
-        
+
         // Add center priority moves if not already included
         int center = BOARD_SIZE / 2;
         if (boardState[index(center, center)] == CELL_EMPTY)
@@ -350,18 +381,17 @@ int main()
             // Insert center moves at the beginning
             moves.insert(moves.begin(), {center, center});
         }
-        
+
         return moves;
     };
 
-
     // OPTIMIZED: Smart move ordering for better alpha-beta pruning
-    auto sortMovesByPriority = [&](vector<pair<int, int>>& moves, const vector<int>& boardState, Cell aiPlayer)
+    auto sortMovesByPriority = [&](vector<pair<int, int>> &moves, const vector<int> &boardState, Cell aiPlayer)
     {
         Cell opponent = (aiPlayer == CELL_BLACK) ? CELL_WHITE : CELL_BLACK;
-        
-        sort(moves.begin(), moves.end(), [&](const pair<int, int>& a, const pair<int, int>& b)
-        {
+
+        sort(moves.begin(), moves.end(), [&](const pair<int, int> &a, const pair<int, int> &b)
+             {
             int priorityA = 0, priorityB = 0;
             
             // Check if move creates immediate win
@@ -388,33 +418,33 @@ int main()
             priorityA += (BOARD_SIZE - centerDistA);
             priorityB += (BOARD_SIZE - centerDistB);
             
-            return priorityA > priorityB;
-        });
+            return priorityA > priorityB; });
     };
 
     // OPTIMIZED: Simple but effective board evaluation
-    auto evaluateBoardOptimized = [&](const vector<int>& boardState, Cell aiPlayer) -> int
+    auto evaluateBoardOptimized = [&](const vector<int> &boardState, Cell aiPlayer) -> int
     {
         Cell opponent = (aiPlayer == CELL_BLACK) ? CELL_WHITE : CELL_BLACK;
         int score = 0;
-        
+
         // Check all lines for patterns
         for (int r = 0; r < BOARD_SIZE; ++r)
         {
             for (int c = 0; c < BOARD_SIZE; ++c)
             {
-                if (boardState[index(r, c)] != CELL_EMPTY) continue;
-                
+                if (boardState[index(r, c)] != CELL_EMPTY)
+                    continue;
+
                 // Check all directions from this empty cell
                 const int directions[4][2] = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
-                
-                for (auto& dir : directions)
+
+                for (auto &dir : directions)
                 {
                     int dr = dir[0], dc = dir[1];
-                    
+
                     // Count consecutive pieces in both directions
                     int aiCount = 0, opponentCount = 0;
-                    
+
                     // Forward direction
                     for (int i = 1; i < 5; ++i)
                     {
@@ -422,13 +452,20 @@ int main()
                         if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE)
                         {
                             Cell cell = static_cast<Cell>(boardState[index(nr, nc)]);
-                            if (cell == aiPlayer) aiCount++;
-                            else if (cell == opponent) { opponentCount++; break; }
-                            else break;
+                            if (cell == aiPlayer)
+                                aiCount++;
+                            else if (cell == opponent)
+                            {
+                                opponentCount++;
+                                break;
+                            }
+                            else
+                                break;
                         }
-                        else break;
+                        else
+                            break;
                     }
-                    
+
                     // Reverse direction
                     for (int i = 1; i < 5; ++i)
                     {
@@ -436,38 +473,53 @@ int main()
                         if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE)
                         {
                             Cell cell = static_cast<Cell>(boardState[index(nr, nc)]);
-                            if (cell == aiPlayer) aiCount++;
-                            else if (cell == opponent) { opponentCount++; break; }
-                            else break;
+                            if (cell == aiPlayer)
+                                aiCount++;
+                            else if (cell == opponent)
+                            {
+                                opponentCount++;
+                                break;
+                            }
+                            else
+                                break;
                         }
-                        else break;
+                        else
+                            break;
                     }
-                    
+
                     // Score based on what this move would create
                     if (opponentCount == 0) // No opponent blocking
                     {
-                        if (aiCount >= 4) score += 10000; // Almost win
-                        else if (aiCount == 3) score += 1000; // Strong threat
-                        else if (aiCount == 2) score += 100; // Good position
-                        else if (aiCount == 1) score += 10;
+                        if (aiCount >= 4)
+                            score += 10000; // Almost win
+                        else if (aiCount == 3)
+                            score += 1000; // Strong threat
+                        else if (aiCount == 2)
+                            score += 100; // Good position
+                        else if (aiCount == 1)
+                            score += 10;
                     }
-                    
+
                     if (aiCount == 0) // No AI pieces
                     {
-                        if (opponentCount >= 4) score -= 10000; // Block opponent win
-                        else if (opponentCount == 3) score -= 1000; // Block threat
-                        else if (opponentCount == 2) score -= 100;
-                        else if (opponentCount == 1) score -= 10;
+                        if (opponentCount >= 4)
+                            score -= 10000; // Block opponent win
+                        else if (opponentCount == 3)
+                            score -= 1000; // Block threat
+                        else if (opponentCount == 2)
+                            score -= 100;
+                        else if (opponentCount == 1)
+                            score -= 10;
                     }
                 }
             }
         }
-        
+
         return score;
     };
 
     // OPTIMIZED: Minimax with transposition table
-    auto minimax = [&](auto&& self, vector<int>& boardState, int depth, int alpha, int beta, bool isMaximizing, Cell aiPlayer) -> int
+    auto minimax = [&](auto &&self, vector<int> &boardState, int depth, int alpha, int beta, bool isMaximizing, Cell aiPlayer) -> int
     {
         // Check transposition table first
         if (depth < MAX_DEPTH - 2) // Cache only deeper positions
@@ -477,72 +529,79 @@ int main()
                 return tt.get(boardState);
             }
         }
-        
+
         Cell opponent = (aiPlayer == CELL_BLACK) ? CELL_WHITE : CELL_BLACK;
-        
+
         // Terminal conditions (early exit for performance)
-        if (checkWin(boardState, aiPlayer)) return 1000000 - depth;
-        if (checkWin(boardState, opponent)) return -1000000 + depth;
-        if (depth == 0 || checkBoardFull()) 
+        if (checkWin(boardState, aiPlayer))
+            return 1000000 - depth;
+        if (checkWin(boardState, opponent))
+            return -1000000 + depth;
+        if (depth == 0 || checkBoardFull())
         {
             int eval = evaluateBoardOptimized(boardState, aiPlayer);
-            if (depth < MAX_DEPTH - 2) tt.set(boardState, eval);
+            if (depth < MAX_DEPTH - 2)
+                tt.set(boardState, eval);
             return eval;
         }
-        
+
         // Generate smart candidate moves
         auto possibleMoves = generateCandidateMoves(boardState);
         sortMovesByPriority(possibleMoves, boardState, aiPlayer);
-        
+
         // Limit moves for performance (keep only best ones)
         if (possibleMoves.size() > 15)
         {
             possibleMoves.resize(15);
         }
-        
+
         if (isMaximizing)
         {
             int maxEval = numeric_limits<int>::min();
-            for (const auto& move : possibleMoves)
+            for (const auto &move : possibleMoves)
             {
                 boardState[index(move.first, move.second)] = aiPlayer;
                 int eval = self(self, boardState, depth - 1, alpha, beta, false, aiPlayer);
                 boardState[index(move.first, move.second)] = CELL_EMPTY;
-                
+
                 maxEval = max(maxEval, eval);
                 alpha = max(alpha, eval);
-                if (beta <= alpha) break; // Alpha-beta pruning
+                if (beta <= alpha)
+                    break; // Alpha-beta pruning
             }
-            
-            if (depth < MAX_DEPTH - 2) tt.set(boardState, maxEval);
+
+            if (depth < MAX_DEPTH - 2)
+                tt.set(boardState, maxEval);
             return maxEval;
         }
         else
         {
             int minEval = numeric_limits<int>::max();
-            for (const auto& move : possibleMoves)
+            for (const auto &move : possibleMoves)
             {
                 boardState[index(move.first, move.second)] = opponent;
                 int eval = self(self, boardState, depth - 1, alpha, beta, true, aiPlayer);
                 boardState[index(move.first, move.second)] = CELL_EMPTY;
-                
+
                 minEval = min(minEval, eval);
                 beta = min(beta, eval);
-                if (beta <= alpha) break; // Alpha-beta pruning
+                if (beta <= alpha)
+                    break; // Alpha-beta pruning
             }
-            
-            if (depth < MAX_DEPTH - 2) tt.set(boardState, minEval);
+
+            if (depth < MAX_DEPTH - 2)
+                tt.set(boardState, minEval);
             return minEval;
         }
     };
 
-    auto getBestMoveOptimized = [&](vector<int>& boardState, Cell aiPlayer) -> pair<int, int>
+    auto getBestMoveOptimized = [&](vector<int> &boardState, Cell aiPlayer) -> pair<int, int>
     {
         pair<int, int> bestMove = {-1, -1};
         int bestScore = numeric_limits<int>::min();
-        
+
         auto startTime = chrono::high_resolution_clock::now();
-        
+
         // First check for immediate winning move
         for (int r = 0; r < BOARD_SIZE && bestMove.first == -1; ++r)
         {
@@ -559,7 +618,7 @@ int main()
                 }
             }
         }
-        
+
         // Then check for immediate blocking move
         if (bestMove.first == -1)
         {
@@ -580,28 +639,29 @@ int main()
                 }
             }
         }
-        
+
         // Use optimized minimax for strategic move
         if (bestMove.first == -1)
         {
             auto possibleMoves = generateCandidateMoves(boardState);
             sortMovesByPriority(possibleMoves, boardState, aiPlayer);
-            
+
             // Limit to top moves for performance
             if (possibleMoves.size() > 8)
             {
                 possibleMoves.resize(8);
             }
-            
+
+            // now applying alpha-beta pruning
             int alpha = numeric_limits<int>::min();
             int beta = numeric_limits<int>::max();
-            
-            for (const auto& move : possibleMoves)
+
+            for (const auto &move : possibleMoves)
             {
                 boardState[index(move.first, move.second)] = aiPlayer;
                 int score = minimax(minimax, boardState, MAX_DEPTH - 1, alpha, beta, false, aiPlayer);
                 boardState[index(move.first, move.second)] = CELL_EMPTY;
-                
+                cout << "POSSIBLE MOVE: " << move.first << "," << move.second << " SCORE: " << score << endl;
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -609,23 +669,26 @@ int main()
                 }
             }
         }
-        
+
         auto endTime = chrono::high_resolution_clock::now();
         auto duration = chrono::duration_cast<chrono::milliseconds>(endTime - startTime);
         cout << "AI thinking time: " << duration.count() << "ms" << endl;
-        
+        cout << "#####################################\n";
+        cout << "AI selected move: " << bestMove.first << "," << bestMove.second << " with score " << bestScore << endl;
+        cout << "#####################################\n";
         return bestMove;
     };
 
     auto computerMove = [&]()
     {
-        if (gameEnded) return;
-        
+        if (gameEnded)
+            return;
+
         auto bestMove = getBestMoveOptimized(board, computerColor);
         if (bestMove.first != -1)
         {
             board[index(bestMove.first, bestMove.second)] = computerColor;
-            
+
             if (checkWin(board, computerColor))
             {
                 winner = computerColor;
@@ -639,7 +702,7 @@ int main()
                 state = GameState::GAME_OVER;
             }
         }
-        
+
         playerTurn = true;
     };
 
@@ -686,7 +749,7 @@ int main()
             {
                 sf::Vector2i mousePos = sf::Mouse::getPosition(window);
                 sf::Vector2f mp = window.mapPixelToCoords(mousePos);
-                
+
                 if (state == GameState::MENU)
                 {
                     if (startBtn.contains(mp))
@@ -700,21 +763,23 @@ int main()
                 }
                 else if (state == GameState::COIN_SELECT)
                 {
-                    if (whiteBtn.contains(mp))
+                    if (whiteBtn.contains(mp)) // player will start first
                     {
                         humanColor = CELL_WHITE;
                         computerColor = CELL_BLACK;
-                        playerTurn = true;
                         resetBoard();
+                        playerTurn = true;
                         state = GameState::PLAYING;
                     }
-                    else if (blackBtn.contains(mp))
+                    else if (blackBtn.contains(mp)) // computer will start first
                     {
                         humanColor = CELL_BLACK;
                         computerColor = CELL_WHITE;
-                        playerTurn = true;
                         resetBoard();
+                        playerTurn = false;
                         state = GameState::PLAYING;
+                        // Trigger computer's first move
+                        computerMove();
                     }
                     else if (backBtn.contains(mp))
                     {
@@ -723,23 +788,24 @@ int main()
                 }
                 else if (state == GameState::PLAYING)
                 {
+                    // Block all mouse clicks when it's not the player's turn or game has ended
                     if (!playerTurn || gameEnded)
                     {
+                        // Ignore all mouse clicks during computer's turn
                         continue;
                     }
-                    
 
                     pair<int, int> cellPos = boardPosToCell(mp);
                     int r = cellPos.first;
                     int c = cellPos.second;
-                    
+
                     if (r != -1 && c != -1)
                     {
                         int idx = index(r, c);
                         if (board[idx] == CELL_EMPTY)
                         {
                             board[idx] = humanColor;
-                            
+
                             if (checkWin(board, humanColor))
                             {
                                 winner = humanColor;
@@ -755,6 +821,13 @@ int main()
                             else
                             {
                                 playerTurn = false;
+                                // Process events to prevent queued clicks during computer's turn
+                                sf::Event dummyEvent;
+                                while (window.pollEvent(dummyEvent))
+                                {
+                                    if (dummyEvent.type == sf::Event::Closed)
+                                        window.close();
+                                }
                                 computerMove();
                             }
                         }
@@ -770,7 +843,18 @@ int main()
                     if (newGameBtn.contains(mp))
                     {
                         resetBoard();
-                        state = GameState::PLAYING;
+                        // Restart with same color choices
+                        if (humanColor == CELL_BLACK)
+                        {
+                            playerTurn = false;
+                            state = GameState::PLAYING;
+                            computerMove();
+                        }
+                        else
+                        {
+                            playerTurn = true;
+                            state = GameState::PLAYING;
+                        }
                     }
                     else if (mainMenuBtn.contains(mp))
                     {
@@ -861,73 +945,130 @@ int main()
                 window.draw(pausedText);
             }
 
-            else if (state == GameState::GAME_OVER)
+            // Show "Computer's Turn" indicator
+            if (!playerTurn && !gameEnded && fontLoaded)
             {
-                // Draw semi-transparent overlay
-                sf::RectangleShape overlay;
-                overlay.setSize(sf::Vector2f(winW, winH));
-                overlay.setFillColor(sf::Color(0, 0, 0, 180));
-                window.draw(overlay);
-                
-                if (fontLoaded)
+                sf::Text turnText;
+                turnText.setFont(font);
+                turnText.setString("Computer's Turn...");
+                turnText.setCharacterSize(24);
+                turnText.setFillColor(sf::Color(255, 200, 50)); // Orange color
+                turnText.setStyle(sf::Text::Bold);
+                sf::FloatRect tb = turnText.getLocalBounds();
+                turnText.setOrigin(tb.left + tb.width / 2.0f, tb.top + tb.height / 2.0f);
+                turnText.setPosition(winW / 2.0f, 30.0f);
+                window.draw(turnText);
+            }
+        }
+        else if (state == GameState::GAME_OVER)
+        {
+            // draw board background
+            sf::RectangleShape bg;
+            bg.setPosition(boardOrigin.x - cellSize / 2.0f, boardOrigin.y - cellSize / 2.0f);
+            bg.setSize({cellSize * (BOARD_SIZE - 1) + cellSize, cellSize * (BOARD_SIZE - 1) + cellSize});
+            bg.setFillColor(BOARD_COLOR);
+            bg.setOutlineColor(sf::Color::Black);
+            bg.setOutlineThickness(2.0f);
+            window.draw(bg);
+
+            // grid lines
+            for (int i = 0; i < BOARD_SIZE; ++i)
+            {
+                sf::Vertex hline[] = {
+                    sf::Vertex({boardOrigin.x, boardOrigin.y + i * cellSize}, sf::Color::Black),
+                    sf::Vertex({boardOrigin.x + (BOARD_SIZE - 1) * cellSize, boardOrigin.y + i * cellSize}, sf::Color::Black)};
+                sf::Vertex vline[] = {
+                    sf::Vertex({boardOrigin.x + i * cellSize, boardOrigin.y}, sf::Color::Black),
+                    sf::Vertex({boardOrigin.x + i * cellSize, boardOrigin.y + (BOARD_SIZE - 1) * cellSize}, sf::Color::Black)};
+                window.draw(hline, 2, sf::Lines);
+                window.draw(vline, 2, sf::Lines);
+            }
+
+            // draw pieces
+            for (int r = 0; r < BOARD_SIZE; ++r)
+                for (int c = 0; c < BOARD_SIZE; ++c)
                 {
-                    // Enhanced winner splash with better styling
-                    sf::Text gameOverText;
-                    gameOverText.setFont(font);
-                    gameOverText.setCharacterSize(64);
-                    
-                    // Winner-specific colors
-                    if (winner == CELL_EMPTY)
-                    {
-                        gameOverText.setString("IT'S A DRAW!");
-                        gameOverText.setFillColor(sf::Color(200, 200, 200)); // Light gray for draw
-                    }
-                    else if (winner == humanColor)
-                    {
-                        gameOverText.setString("CONGRATULATIONS!");
-                        gameOverText.setFillColor(sf::Color(50, 205, 50)); // Lime green for win
-                    }
+                    int v = board[index(r, c)];
+                    if (v == CELL_EMPTY)
+                        continue;
+                    sf::CircleShape piece(cellSize * 0.4f);
+                    sf::Vector2f center(boardOrigin.x + c * cellSize, boardOrigin.y + r * cellSize);
+                    piece.setOrigin(piece.getRadius(), piece.getRadius());
+                    piece.setPosition(center);
+                    if (v == CELL_BLACK)
+                        piece.setFillColor(sf::Color::Black);
                     else
-                    {
-                        gameOverText.setString("GAME OVER");
-                        gameOverText.setFillColor(sf::Color(220, 20, 60)); // Crimson for loss
-                    }
-                    
-                    sf::FloatRect textBounds = gameOverText.getLocalBounds();
-                    gameOverText.setOrigin(textBounds.left + textBounds.width / 2.0f, 
-                                          textBounds.top + textBounds.height / 2.0f);
-                    gameOverText.setPosition(winW / 2.0f, winH / 2.0f - 100.0f);
-                    window.draw(gameOverText);
-                    
-                    // Subtitle with result
-                    sf::Text subtitleText;
-                    subtitleText.setFont(font);
-                    subtitleText.setCharacterSize(32);
-                    
-                    if (winner == CELL_EMPTY)
-                    {
-                        subtitleText.setString("No winner this time");
-                    }
-                    else if (winner == humanColor)
-                    {
-                        subtitleText.setString("YOU WIN!");
-                    }
-                    else
-                    {
-                        subtitleText.setString("Computer wins");
-                    }
-                    
-                    subtitleText.setFillColor(WHITE);
-                    sf::FloatRect subtitleBounds = subtitleText.getLocalBounds();
-                    subtitleText.setOrigin(subtitleBounds.left + subtitleBounds.width / 2.0f, 
-                                          subtitleBounds.top + subtitleBounds.height / 2.0f);
-                    subtitleText.setPosition(winW / 2.0f, winH / 2.0f - 40.0f);
-                    window.draw(subtitleText);
-                    
-                    // Draw the new game buttons
-                    newGameBtn.draw(window);
-                    mainMenuBtn.draw(window);
+                        piece.setFillColor(sf::Color::White);
+                    window.draw(piece);
+                    piece.setRadius(cellSize * 0.4f - 1.0f);
+                    piece.setOrigin(piece.getRadius(), piece.getRadius());
                 }
+
+            // Draw semi-transparent overlay
+            sf::RectangleShape overlay;
+            overlay.setSize(sf::Vector2f(winW, winH));
+            overlay.setFillColor(sf::Color(0, 0, 0, 180));
+            window.draw(overlay);
+
+            if (fontLoaded)
+            {
+                // Enhanced winner splash with better styling
+                sf::Text gameOverText;
+                gameOverText.setFont(font);
+                gameOverText.setCharacterSize(64);
+                gameOverText.setStyle(sf::Text::Bold);
+
+                // Winner-specific colors
+                if (winner == CELL_EMPTY)
+                {
+                    gameOverText.setString("IT'S A DRAW!");
+                    gameOverText.setFillColor(sf::Color(200, 200, 200)); // Light gray for draw
+                }
+                else if (winner == humanColor)
+                {
+                    gameOverText.setString("VICTORY!");
+                    gameOverText.setFillColor(sf::Color(50, 255, 50)); // Bright green for win
+                }
+                else
+                {
+                    gameOverText.setString("DEFEAT");
+                    gameOverText.setFillColor(sf::Color(255, 50, 50)); // Bright red for loss
+                }
+
+                sf::FloatRect textBounds = gameOverText.getLocalBounds();
+                gameOverText.setOrigin(textBounds.left + textBounds.width / 2.0f,
+                                       textBounds.top + textBounds.height / 2.0f);
+                gameOverText.setPosition(winW / 2.0f, winH / 2.0f - 100.0f);
+                window.draw(gameOverText);
+
+                // Subtitle with result
+                sf::Text subtitleText;
+                subtitleText.setFont(font);
+                subtitleText.setCharacterSize(28);
+
+                if (winner == CELL_EMPTY)
+                {
+                    subtitleText.setString("The board is full - no winner this time");
+                }
+                else if (winner == humanColor)
+                {
+                    subtitleText.setString("You defeated the computer!");
+                }
+                else
+                {
+                    subtitleText.setString("The computer wins this round");
+                }
+
+                subtitleText.setFillColor(WHITE);
+                sf::FloatRect subtitleBounds = subtitleText.getLocalBounds();
+                subtitleText.setOrigin(subtitleBounds.left + subtitleBounds.width / 2.0f,
+                                       subtitleBounds.top + subtitleBounds.height / 2.0f);
+                subtitleText.setPosition(winW / 2.0f, winH / 2.0f - 30.0f);
+                window.draw(subtitleText);
+
+                // Draw the new game buttons
+                newGameBtn.draw(window);
+                mainMenuBtn.draw(window);
             }
         }
 
