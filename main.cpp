@@ -11,13 +11,24 @@
 #include <chrono>
 using namespace std;
 
+unsigned int userWin = 0;
+unsigned int aiWin = 0;
+unsigned int RoundNumber = 1;
+
+void resetScores()
+{
+    userWin = 0;
+    aiWin = 0;
+    RoundNumber = 1;
+}
+
 // Constants and colors
 const int BOARD_SIZE = 10;
 const unsigned int maxWidth = 1080;
 const unsigned int maxHeight = 720;
 const sf::Color WHITE = sf::Color(200, 200, 200);
 const sf::Color BLACK = sf::Color(10, 10, 10);
-const sf::Color BOARD_COLOR = sf::Color(160, 140, 10);
+const sf::Color BOARD_COLOR = sf::Color(254, 194, 35);
 
 const unsigned int winW = sf::VideoMode::getDesktopMode().width * 0.7 > maxWidth ? maxWidth : sf::VideoMode::getDesktopMode().width * 0.7;
 const unsigned int winH = sf::VideoMode::getDesktopMode().height * 0.7 > maxHeight ? maxHeight : sf::VideoMode::getDesktopMode().height * 0.7;
@@ -39,15 +50,95 @@ enum Cell
     CELL_WHITE = 2
 };
 
+// Rounded rectangle shape class
+class RoundedRectangleShape : public sf::Shape
+{
+private:
+    sf::Vector2f m_size;
+    float m_radius;
+    size_t m_cornerPointCount;
+
+public:
+    explicit RoundedRectangleShape(const sf::Vector2f &size = sf::Vector2f(0, 0), float radius = 0, size_t cornerPointCount = 10)
+    {
+        m_size = size;
+        m_radius = radius;
+        m_cornerPointCount = cornerPointCount;
+        update();
+    }
+
+    void setSize(const sf::Vector2f &size)
+    {
+        m_size = size;
+        update();
+    }
+
+    const sf::Vector2f &getSize() const
+    {
+        return m_size;
+    }
+
+    void setCornersRadius(float radius)
+    {
+        m_radius = radius;
+        update();
+    }
+
+    float getCornersRadius() const
+    {
+        return m_radius;
+    }
+
+    virtual size_t getPointCount() const
+    {
+        return m_cornerPointCount * 4;
+    }
+
+    virtual sf::Vector2f getPoint(size_t index) const
+    {
+        if (index >= m_cornerPointCount * 4)
+            return sf::Vector2f(0, 0);
+
+        float deltaAngle = 90.0f / (m_cornerPointCount - 1);
+        sf::Vector2f center;
+        unsigned int centerIndex = index / m_cornerPointCount;
+        static const float pi = 3.141592654f;
+
+        switch (centerIndex)
+        {
+        case 0:
+            center.x = m_size.x - m_radius;
+            center.y = m_radius;
+            break;
+        case 1:
+            center.x = m_radius;
+            center.y = m_radius;
+            break;
+        case 2:
+            center.x = m_radius;
+            center.y = m_size.y - m_radius;
+            break;
+        case 3:
+            center.x = m_size.x - m_radius;
+            center.y = m_size.y - m_radius;
+            break;
+        }
+
+        return sf::Vector2f(
+            m_radius * cos(deltaAngle * (index - centerIndex) * pi / 180) + center.x,
+            -m_radius * sin(deltaAngle * (index - centerIndex) * pi / 180) + center.y);
+    }
+};
+
 struct Button
 {
-    sf::RectangleShape rect;
+    RoundedRectangleShape rect;
     sf::Text label;
     Button() {}
     Button(const sf::Vector2f &pos, const sf::Vector2f &size, const sf::Font &font, const string &text, unsigned int charSize = 20)
     {
+        rect = RoundedRectangleShape(size, 20.0f, 15);
         rect.setPosition(pos);
-        rect.setSize(size);
         rect.setFillColor(sf::Color(100, 100, 140));
         rect.setOutlineColor(sf::Color::Black);
         rect.setOutlineThickness(2.0f);
@@ -61,6 +152,18 @@ struct Button
         label.setPosition(pos + size / 2.0f);
     }
     bool contains(const sf::Vector2f &p) const { return rect.getGlobalBounds().contains(p); }
+    void setPosition(const sf::Vector2f &pos)
+    {
+        rect.setPosition(pos);
+        sf::Vector2f size = rect.getSize();
+        sf::FloatRect tb = label.getLocalBounds();
+        label.setOrigin(tb.left + tb.width / 2.0f, tb.top + tb.height / 2.0f);
+        label.setPosition(pos + size / 2.0f);
+    }
+    sf::Vector2f getSize() const
+    {
+        return rect.getSize();
+    }
     void draw(sf::RenderWindow &w) const
     {
         w.draw(rect);
@@ -133,16 +236,16 @@ int main()
     Button startBtn, exitBtn;
     if (fontLoaded)
     {
-        startBtn = Button({winW / 2.0f - 120.0f, winH / 2.0f + 120.0f}, {240.0f, 50.0f}, font, "Start Game", 24);
-        exitBtn = Button({winW / 2.0f - 120.0f, winH / 2.0f + 200.0f}, {240.0f, 50.0f}, font, "Exit", 24);
+        startBtn = Button({winW / 2.0f - 120.0f, winH / 2.0f + 100.0f}, {240.0f, 50.0f}, font, "Start Game", 20);
+        exitBtn = Button({winW / 2.0f - 120.0f, winH / 2.0f + 160.0f}, {240.0f, 50.0f}, font, "Exit", 20);
     }
     else
     {
+        startBtn.rect = RoundedRectangleShape({240.0f, 50.0f}, 20.0f, 15);
         startBtn.rect.setPosition({winW / 2.0f, winH / 2.0f + 160.0f});
-        startBtn.rect.setSize({240.0f, 50.0f});
         startBtn.rect.setFillColor(sf::Color(100, 100, 140));
+        exitBtn.rect = RoundedRectangleShape({240.0f, 50.0f}, 20.0f, 15);
         exitBtn.rect.setPosition({winW / 2.0f, winH / 2.0f + 200.0f});
-        exitBtn.rect.setSize({240.0f, 50.0f});
         exitBtn.rect.setFillColor(sf::Color(100, 100, 140));
     }
 
@@ -150,18 +253,18 @@ int main()
     Button whiteBtn, blackBtn, backBtn;
     if (fontLoaded)
     {
-        whiteBtn = Button({winW / 2.0f - 140.0f, winH / 2.0f - 30.0f}, {300.0f, 60.0f}, font, "White (W)", 20);
-        blackBtn = Button({winW / 2.0f - 140.0f, winH / 2.0f + 30.0f}, {300.0f, 60.0f}, font, "Black (B)", 20);
+        whiteBtn = Button({winW / 2.0f - 140.0f, winH / 2.0f - 40.0f}, {300.0f, 60.0f}, font, "White (W)", 20);
+        blackBtn = Button({winW / 2.0f - 140.0f, winH / 2.0f + 40.0f}, {300.0f, 60.0f}, font, "Black (B)", 20);
         backBtn = Button({20.0f, 20.0f}, {100.0f, 36.0f}, font, "Back", 18);
     }
     else
     {
+        whiteBtn.rect = RoundedRectangleShape({200.0f, 60.0f}, 20.0f, 15);
         whiteBtn.rect.setPosition({winW / 2.0f - 260.0f, winH / 2.0f - 30.0f});
-        whiteBtn.rect.setSize({200.0f, 60.0f});
+        blackBtn.rect = RoundedRectangleShape({200.0f, 60.0f}, 20.0f, 15);
         blackBtn.rect.setPosition({winW / 2.0f + 60.0f, winH / 2.0f - 30.0f});
-        blackBtn.rect.setSize({200.0f, 60.0f});
+        backBtn.rect = RoundedRectangleShape({100.0f, 36.0f}, 20.0f, 15);
         backBtn.rect.setPosition({20.0f, 20.0f});
-        backBtn.rect.setSize({100.0f, 36.0f});
     }
 
     // Game over buttons
@@ -173,19 +276,20 @@ int main()
     }
     else
     {
+        newGameBtn.rect = RoundedRectangleShape({250.0f, 50.0f}, 20.0f, 15);
         newGameBtn.rect.setPosition({winW / 2.0f - 125.0f, winH / 2.0f + 80.0f});
-        newGameBtn.rect.setSize({250.0f, 50.0f});
         newGameBtn.rect.setFillColor(sf::Color(100, 100, 140));
+        mainMenuBtn.rect = RoundedRectangleShape({250.0f, 50.0f}, 20.0f, 15);
         mainMenuBtn.rect.setPosition({winW / 2.0f - 125.0f, winH / 2.0f + 140.0f});
-        mainMenuBtn.rect.setSize({250.0f, 50.0f});
         mainMenuBtn.rect.setFillColor(sf::Color(100, 100, 140));
     }
 
-    // Board layout
+    // Board layout - positioned on right side
     float boardMargin = 40.0f;
-    float boardSizePx = min(winW - 2 * boardMargin, winH - 2 * boardMargin - 60.0f);
+    float boardSizePx = min(winW - 2 * boardMargin - 200.0f, winH - 2 * boardMargin - 60.0f);
     float cellSize = boardSizePx / (BOARD_SIZE - 1);
-    sf::Vector2f boardOrigin((winW - boardSizePx) / 2.0f, (winH - boardSizePx) / 2.0f + 20.0f);
+    // Position board on right side with gap from border
+    sf::Vector2f boardOrigin(winW - boardSizePx - boardMargin, (winH - boardSizePx) / 2.0f + 20.0f);
 
     // board storage
     vector<int> board(BOARD_SIZE * BOARD_SIZE, CELL_EMPTY);
@@ -201,6 +305,7 @@ int main()
     const int MAX_DEPTH = 4;
     Cell winner = CELL_EMPTY;
     bool gameEnded = false;
+    bool scoreUpdated = false; // Flag to prevent multiple score updates
 
     // Performance optimization: Transposition table
     TranspositionTable tt;
@@ -218,6 +323,7 @@ int main()
         fill(board.begin(), board.end(), CELL_EMPTY);
         winner = CELL_EMPTY;
         gameEnded = false;
+        scoreUpdated = false; // Reset score update flag
         // Don't reset playerTurn here - let caller manage it
         tt.clear(); // Clear transposition table
     };
@@ -340,8 +446,17 @@ int main()
 
         if (!hasPieces)
         {
+            // First move: pick a random position near center
             int center = BOARD_SIZE / 2;
-            moves.push_back({center, center});
+            uniform_int_distribution<int> dist(-2, 2); // Random offset from center
+            int randomRow = center + dist(rng);
+            int randomCol = center + dist(rng);
+            
+            // Ensure it's within bounds
+            randomRow = max(2, min(BOARD_SIZE - 3, randomRow));
+            randomCol = max(2, min(BOARD_SIZE - 3, randomCol));
+            
+            moves.push_back({randomRow, randomCol});
             return moves;
         }
 
@@ -662,7 +777,7 @@ int main()
                 int score = minimax(minimax, boardState, MAX_DEPTH - 1, alpha, beta, false, aiPlayer);
                 boardState[index(move.first, move.second)] = CELL_EMPTY;
                 cout << "POSSIBLE MOVE: " << move.first << "," << move.second << " SCORE: " << score << endl;
-                if (score > bestScore)
+                if (score >= bestScore)
                 {
                     bestScore = score;
                     bestMove = move;
@@ -711,12 +826,12 @@ int main()
     if (fontLoaded)
     {
         pausedText.setFont(font);
-        pausedText.setString("Paused - Press P to resume");
+        pausedText.setString("Paused - Press >Esc< to resume");
         pausedText.setCharacterSize(28);
         pausedText.setFillColor(sf::Color::White);
         sf::FloatRect pb = pausedText.getLocalBounds();
         pausedText.setOrigin(pb.left + pb.width / 2.0f, pb.top + pb.height / 2.0f);
-        pausedText.setPosition(winW / 2.0f, 40.0f);
+        pausedText.setPosition(winW / 2.0f, 30.0f);
     }
 
     // Main loop
@@ -733,15 +848,17 @@ int main()
                 {
                     if (state == GameState::MENU)
                         window.close();
-                    else
-                        state = GameState::MENU;
-                }
-                if (event.key.code == sf::Keyboard::P)
-                {
-                    if (state == GameState::PLAYING)
+                    else if (state == GameState::PLAYING)
                         state = GameState::PAUSED;
                     else if (state == GameState::PAUSED)
                         state = GameState::PLAYING;
+                    else if (state == GameState::GAME_OVER)
+                    {
+                        resetScores();
+                        resetBoard();
+                        scoreUpdated = false;
+                        state = GameState::MENU;
+                    }
                 }
             }
 
@@ -833,16 +950,15 @@ int main()
                         }
                     }
                 }
-                else if (state == GameState::PAUSED)
-                {
-                    state = GameState::PLAYING;
-                }
 
                 else if (state == GameState::GAME_OVER)
                 {
                     if (newGameBtn.contains(mp))
                     {
                         resetBoard();
+                        //swap turns for fairness
+                        humanColor = (humanColor == CELL_BLACK) ? CELL_WHITE : CELL_BLACK;
+                        computerColor = (computerColor == CELL_BLACK) ? CELL_WHITE : CELL_BLACK;
                         // Restart with same color choices
                         if (humanColor == CELL_BLACK)
                         {
@@ -859,8 +975,17 @@ int main()
                     else if (mainMenuBtn.contains(mp))
                     {
                         state = GameState::MENU;
+                        resetScores();
                     }
                 }
+            }
+
+            if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Right)
+            {
+                if (state == GameState::PLAYING)
+                    state = GameState::PAUSED;
+                else if (state == GameState::PAUSED)
+                    state = GameState::PLAYING;
             }
         }
 
@@ -940,8 +1065,55 @@ int main()
                     piece.setOrigin(piece.getRadius(), piece.getRadius());
                 }
 
+            // Display score and round information on left side
+            if (fontLoaded)
+            {
+                float leftPanelX = 50.0f;
+                float startY = boardOrigin.y + 50.0f;
+
+                //display first turn info
+                sf::Text firstTurnText;
+                firstTurnText.setFont(font);
+                firstTurnText.setString("First Turn: " + string((humanColor == CELL_WHITE) ? "Human" : "AI - CPU"));
+                firstTurnText.setCharacterSize(16);
+                firstTurnText.setFillColor(sf::Color(255, 215, 0)); // Gold color
+                firstTurnText.setPosition(leftPanelX, startY - 40.0f);
+                window.draw(firstTurnText);
+
+                // Round number
+                sf::Text roundText;
+                roundText.setFont(font);
+                roundText.setString("Round: " + to_string(RoundNumber));
+                roundText.setCharacterSize(16);
+                roundText.setFillColor(sf::Color(255, 215, 0)); // Gold color
+                roundText.setPosition(leftPanelX, startY);
+                window.draw(roundText);
+
+                // User wins
+                sf::Text userWinText;
+                userWinText.setFont(font);
+                userWinText.setString("Your Wins: " + to_string(userWin));
+                userWinText.setCharacterSize(16);
+                userWinText.setFillColor(sf::Color(50, 255, 50)); // Green
+                userWinText.setPosition(leftPanelX, startY + 40.0f);
+                window.draw(userWinText);
+
+                // AI wins
+                sf::Text aiWinText;
+                aiWinText.setFont(font);
+                aiWinText.setString("AI Wins: " + to_string(aiWin));
+                aiWinText.setCharacterSize(16);
+                aiWinText.setFillColor(sf::Color(255, 50, 50)); // Red
+                aiWinText.setPosition(leftPanelX, startY + 80.0f);
+                window.draw(aiWinText);
+            }
+
             if (state == GameState::PAUSED && fontLoaded)
             {
+                sf::RectangleShape overlay;
+                overlay.setSize(sf::Vector2f(winW, winH));
+                overlay.setFillColor(sf::Color(0, 0, 0, 180));
+                window.draw(overlay);
                 window.draw(pausedText);
             }
 
@@ -962,6 +1134,22 @@ int main()
         }
         else if (state == GameState::GAME_OVER)
         {
+            // Update scores only once when entering game over state
+            if (!scoreUpdated)
+            {
+                RoundNumber++;
+                if (winner == humanColor)
+                {
+                    userWin++;
+                }
+                else if (winner == computerColor)
+                {
+                    aiWin++;
+                }
+                scoreUpdated = true;
+                cout << "Game Over - Round: " << RoundNumber - 1 << ", User Wins: " << userWin << ", AI Wins: " << aiWin << endl;
+            }
+
             // draw board background
             sf::RectangleShape bg;
             bg.setPosition(boardOrigin.x - cellSize / 2.0f, boardOrigin.y - cellSize / 2.0f);
@@ -1038,7 +1226,7 @@ int main()
                 sf::FloatRect textBounds = gameOverText.getLocalBounds();
                 gameOverText.setOrigin(textBounds.left + textBounds.width / 2.0f,
                                        textBounds.top + textBounds.height / 2.0f);
-                gameOverText.setPosition(winW / 2.0f, winH / 2.0f - 100.0f);
+                gameOverText.setPosition(winW / 2.0f, gameOverText.getCharacterSize() / 2.0f + 120.0f);
                 window.draw(gameOverText);
 
                 // Subtitle with result
@@ -1063,10 +1251,12 @@ int main()
                 sf::FloatRect subtitleBounds = subtitleText.getLocalBounds();
                 subtitleText.setOrigin(subtitleBounds.left + subtitleBounds.width / 2.0f,
                                        subtitleBounds.top + subtitleBounds.height / 2.0f);
-                subtitleText.setPosition(winW / 2.0f, winH / 2.0f - 30.0f);
+                subtitleText.setPosition(winW / 2.0f, 30.0f);
                 window.draw(subtitleText);
 
                 // Draw the new game buttons
+                newGameBtn.setPosition({50.0f, winH / 2.0f + 50.0f});
+                mainMenuBtn.setPosition({50.0f, winH / 2.0f + 150.0f});
                 newGameBtn.draw(window);
                 mainMenuBtn.draw(window);
             }
