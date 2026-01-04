@@ -19,7 +19,7 @@ BOARD_SIZE = 10
 MAX_WIDTH = 1080
 MAX_HEIGHT = 720
 WIN_LENGTH = 5
-MAX_DEPTH = 5
+MAX_DEPTH = 6
 
 # Colors (RGB normalized)
 WHITE_COLOR = (1, 1, 1)
@@ -49,22 +49,37 @@ class Cell:
     BLACK = 1
     WHITE = 2
 
-# Transposition table for AI
+# Transposition table for AI with Zobrist Hashing
 class TranspositionTable:
     def __init__(self):
         self.cache = {}
+        # Initialize Zobrist hash table for faster hashing
+        random.seed(42)
+        self.zobrist = [[[random.getrandbits(64) for _ in range(3)] 
+                         for _ in range(BOARD_SIZE)] 
+                        for _ in range(BOARD_SIZE)]
     
-    def board_to_key(self, board):
-        return tuple(board)
+    def compute_hash(self, board):
+        """Compute Zobrist hash for board state - O(n²) but only called once"""
+        h = 0
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                piece = board[r * BOARD_SIZE + c]
+                if piece != Cell.EMPTY:
+                    h ^= self.zobrist[r][c][piece]
+        return h
     
-    def contains(self, board):
-        return self.board_to_key(board) in self.cache
+    def contains(self, hash_key):
+        return hash_key in self.cache
     
-    def get(self, board):
-        return self.cache.get(self.board_to_key(board), 0)
+    def get(self, hash_key):
+        entry = self.cache.get(hash_key)
+        return entry if entry is not None else None
     
-    def set(self, board, value):
-        self.cache[self.board_to_key(board)] = value
+    def set(self, hash_key, value, depth):
+        # Store with depth for better replacement strategy
+        if hash_key not in self.cache or self.cache[hash_key][1] <= depth:
+            self.cache[hash_key] = (value, depth)
     
     def clear(self):
         self.cache.clear()
@@ -115,6 +130,7 @@ class GomokuGame:
         self.game_ended = False
         self.score_updated = False
         self.tt = TranspositionTable()
+        self.last_move = None  # Track last move for optimized win checking
         
         # Setup turtle
         self.screen = turtle.Screen()
@@ -167,6 +183,7 @@ class GomokuGame:
         self.winner = Cell.EMPTY
         self.game_ended = False
         self.score_updated = False
+        self.last_move = None
         self.tt.clear()
     
     def board_pos_to_cell(self, x, y):
@@ -185,6 +202,7 @@ class GomokuGame:
         return r, c
     
     def check_win(self, board_state, player):
+        """Optimized win checking - check all positions but with early exit"""
         # Check all directions for 5 in a row
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
@@ -233,6 +251,137 @@ class GomokuGame:
         
         return False
     
+    def check_win_fast(self, board_state, player, last_r, last_c):
+        """Fast win checking - only check around last move"""
+        if last_r is None or last_c is None:
+            return self.check_win(board_state, player)
+        
+        # Check horizontal
+        count = 1
+        # Check left
+        c = last_c - 1
+        while c >= 0 and board_state[self.index(last_r, c)] == player:
+            count += 1
+            c -= 1
+        # Check right
+        c = last_c + 1
+        while c < BOARD_SIZE and board_state[self.index(last_r, c)] == player:
+            count += 1
+            c += 1
+        if count >= WIN_LENGTH:
+            return True
+        
+        # Check vertical
+        count = 1
+        # Check up
+        r = last_r - 1
+        while r >= 0 and board_state[self.index(r, last_c)] == player:
+            count += 1
+            r -= 1
+        # Check down
+        r = last_r + 1
+        while r < BOARD_SIZE and board_state[self.index(r, last_c)] == player:
+            count += 1
+            r += 1
+        if count >= WIN_LENGTH:
+            return True
+        
+        # Check diagonal (\)
+        count = 1
+        # Check up-left
+        r, c = last_r - 1, last_c - 1
+        while r >= 0 and c >= 0 and board_state[self.index(r, c)] == player:
+            count += 1
+            r -= 1
+            c -= 1
+        # Check down-right
+        r, c = last_r + 1, last_c + 1
+        while r < BOARD_SIZE and c < BOARD_SIZE and board_state[self.index(r, c)] == player:
+            count += 1
+            r += 1
+            c += 1
+        if count >= WIN_LENGTH:
+            return True
+        
+        # Check anti-diagonal (/)
+        count = 1
+        # Check up-right
+        r, c = last_r - 1, last_c + 1
+        while r >= 0 and c < BOARD_SIZE and board_state[self.index(r, c)] == player:
+            count += 1
+            r -= 1
+            c += 1
+        # Check down-left
+        r, c = last_r + 1, last_c - 1
+        while r < BOARD_SIZE and c >= 0 and board_state[self.index(r, c)] == player:
+            count += 1
+            r += 1
+            c -= 1
+        if count >= WIN_LENGTH:
+            return True
+        
+        return False
+    
+    def count_threat_level(self, board_state, player, r, c):
+        """Count how many pieces in a line and if it's open - returns threat level"""
+        if board_state[self.index(r, c)] != Cell.EMPTY:
+            return 0
+        
+        max_threat = 0
+        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]  # horizontal, vertical, diagonal, anti-diagonal
+        
+        for dr, dc in directions:
+            count = 0
+            open_ends = 0
+            
+            # Count in positive direction
+            pos_count = 0
+            for i in range(1, 5):
+                nr, nc = r + i * dr, c + i * dc
+                if 0 <= nr < BOARD_SIZE and 0 <= nc < BOARD_SIZE:
+                    if board_state[self.index(nr, nc)] == player:
+                        pos_count += 1
+                    elif board_state[self.index(nr, nc)] == Cell.EMPTY:
+                        open_ends += 1
+                        break
+                    else:
+                        break
+                else:
+                    break
+            
+            # Count in negative direction
+            neg_count = 0
+            for i in range(1, 5):
+                nr, nc = r - i * dr, c - i * dc
+                if 0 <= nr < BOARD_SIZE and 0 <= nc < BOARD_SIZE:
+                    if board_state[self.index(nr, nc)] == player:
+                        neg_count += 1
+                    elif board_state[self.index(nr, nc)] == Cell.EMPTY:
+                        open_ends += 1
+                        break
+                    else:
+                        break
+                else:
+                    break
+            
+            count = pos_count + neg_count
+            
+            # Evaluate threat level
+            if count >= 4:
+                return 10000  # Immediate win/block
+            elif count == 3:
+                if open_ends == 2:
+                    max_threat = max(max_threat, 5000)  # Open three - very dangerous
+                elif open_ends == 1:
+                    max_threat = max(max_threat, 1000)  # Semi-open three
+            elif count == 2:
+                if open_ends == 2:
+                    max_threat = max(max_threat, 500)  # Open two
+                elif open_ends == 1:
+                    max_threat = max(max_threat, 100)  # Semi-open two
+        
+        return max_threat
+    
     def check_board_full(self):
         return all(cell != Cell.EMPTY for cell in self.board)
     
@@ -274,7 +423,8 @@ class GomokuGame:
         return moves
     
     def evaluate_board(self, board_state, ai_player):
-        opponent = Cell.BLACK if ai_player == Cell.BLACK else Cell.WHITE
+        """Optimized board evaluation with early termination"""
+        opponent = Cell.BLACK if ai_player == Cell.WHITE else Cell.WHITE
         score = 0
         
         for r in range(BOARD_SIZE):
@@ -321,31 +471,39 @@ class GomokuGame:
                     # Score patterns
                     if opponent_count == 0:
                         if ai_count >= 4:
-                            score += 10000
+                            score += 50000
                         elif ai_count == 3:
-                            score += 1000
+                            score += 5000
                         elif ai_count == 2:
-                            score += 100
+                            score += 500
                         elif ai_count == 1:
-                            score += 10
+                            score += 50
                     
                     if ai_count == 0:
                         if opponent_count >= 4:
-                            score -= 10000
+                            score -= 50000
                         elif opponent_count == 3:
-                            score -= 1000
+                            score -= 5000
                         elif opponent_count == 2:
-                            score -= 100
+                            score -= 500
                         elif opponent_count == 1:
-                            score -= 10
+                            score -= 50
+                
+                # Early termination if clearly winning/losing
+                if abs(score) > 100000:
+                    return score
         
         return score
     
     def minimax(self, board_state, depth, alpha, beta, is_maximizing, ai_player):
-        # Check cache
+        # Compute hash for caching
+        board_hash = self.tt.compute_hash(board_state)
+        
+        # Check cache with improved depth awareness
         if depth < MAX_DEPTH - 2:
-            if self.tt.contains(board_state):
-                return self.tt.get(board_state)
+            cached = self.tt.get(board_hash)
+            if cached is not None and cached[1] >= depth:
+                return cached[0]
         
         opponent = Cell.WHITE if ai_player == Cell.BLACK else Cell.BLACK
         
@@ -357,14 +515,16 @@ class GomokuGame:
         if depth == 0 or all(cell != Cell.EMPTY for cell in board_state):
             eval_score = self.evaluate_board(board_state, ai_player)
             if depth < MAX_DEPTH - 2:
-                self.tt.set(board_state, eval_score)
+                self.tt.set(board_hash, eval_score, depth)
             return eval_score
         
         possible_moves = self.generate_candidate_moves(board_state)
         self.sort_moves_by_priority(possible_moves, board_state, ai_player)
         
-        if len(possible_moves) > 15:
-            possible_moves = possible_moves[:15]
+        # Reduce branching for deeper searches
+        max_moves = 20 if depth > 2 else 25
+        if len(possible_moves) > max_moves:
+            possible_moves = possible_moves[:max_moves]
         
         if is_maximizing:
             max_eval = float('-inf')
@@ -379,7 +539,7 @@ class GomokuGame:
                     break
             
             if depth < MAX_DEPTH - 2:
-                self.tt.set(board_state, max_eval)
+                self.tt.set(board_hash, max_eval, depth)
             return max_eval
         else:
             min_eval = float('inf')
@@ -394,7 +554,7 @@ class GomokuGame:
                     break
             
             if depth < MAX_DEPTH - 2:
-                self.tt.set(board_state, min_eval)
+                self.tt.set(board_hash, min_eval, depth)
             return min_eval
     
     def sort_moves_by_priority(self, moves, board_state, ai_player):
@@ -402,22 +562,31 @@ class GomokuGame:
         
         def get_priority(move):
             priority = 0
+            r, c = move[0], move[1]
             
-            # Check for immediate win
-            temp_board = board_state[:]
-            temp_board[self.index(move[0], move[1])] = ai_player
-            if self.check_win(temp_board, ai_player):
-                priority += 1000
+            # Check for immediate win (in-place modification)
+            board_state[self.index(r, c)] = ai_player
+            if self.check_win_fast(board_state, ai_player, r, c):
+                priority += 100000
+            board_state[self.index(r, c)] = Cell.EMPTY
             
-            # Check for blocking opponent win
-            temp_board = board_state[:]
-            temp_board[self.index(move[0], move[1])] = opponent
-            if self.check_win(temp_board, opponent):
-                priority += 500
+            # Check for blocking opponent win (in-place modification)
+            board_state[self.index(r, c)] = opponent
+            if self.check_win_fast(board_state, opponent, r, c):
+                priority += 90000
+            board_state[self.index(r, c)] = Cell.EMPTY
+            
+            # Check threat level for AI's move
+            ai_threat = self.count_threat_level(board_state, ai_player, r, c)
+            priority += ai_threat
+            
+            # Check threat level we're blocking (more important)
+            opponent_threat = self.count_threat_level(board_state, opponent, r, c)
+            priority += opponent_threat * 1.5  # Blocking is slightly more important
             
             # Center distance priority
-            center_dist = abs(move[0] - BOARD_SIZE//2) + abs(move[1] - BOARD_SIZE//2)
-            priority += (BOARD_SIZE - center_dist)
+            center_dist = abs(r - BOARD_SIZE//2) + abs(c - BOARD_SIZE//2)
+            priority += (BOARD_SIZE - center_dist) * 5
             
             return priority
         
@@ -426,43 +595,59 @@ class GomokuGame:
     def get_best_move(self, board_state, ai_player):
         best_move = (-1, -1)
         best_score = float('-inf')
+        opponent = Cell.WHITE if ai_player == Cell.BLACK else Cell.BLACK
         
-        # Check for immediate win
+        # Check for immediate win (optimized with fast check)
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
                 if board_state[self.index(r, c)] == Cell.EMPTY:
                     board_state[self.index(r, c)] = ai_player
-                    if self.check_win(board_state, ai_player):
+                    if self.check_win_fast(board_state, ai_player, r, c):
                         best_move = (r, c)
                         board_state[self.index(r, c)] = Cell.EMPTY
                         return best_move
                     board_state[self.index(r, c)] = Cell.EMPTY
         
-        # Check for blocking move
-        opponent = Cell.WHITE if ai_player == Cell.BLACK else Cell.BLACK
+        # Check for blocking immediate win
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
                 if board_state[self.index(r, c)] == Cell.EMPTY:
                     board_state[self.index(r, c)] = opponent
-                    if self.check_win(board_state, opponent):
+                    if self.check_win_fast(board_state, opponent, r, c):
                         best_move = (r, c)
                         board_state[self.index(r, c)] = Cell.EMPTY
                         return best_move
                     board_state[self.index(r, c)] = Cell.EMPTY
+        
+        # Check for critical threats (open 3s and 4s)
+        max_threat = 0
+        threat_move = (-1, -1)
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if board_state[self.index(r, c)] == Cell.EMPTY:
+                    # Check opponent's threat at this position
+                    threat_level = self.count_threat_level(board_state, opponent, r, c)
+                    if threat_level > max_threat:
+                        max_threat = threat_level
+                        threat_move = (r, c)
+        
+        # If there's a serious threat (open 3 or more), block it immediately
+        if max_threat >= 5000:
+            return threat_move
         
         # Use minimax
         possible_moves = self.generate_candidate_moves(board_state)
         self.sort_moves_by_priority(possible_moves, board_state, ai_player)
         
-        if len(possible_moves) > 8:
-            possible_moves = possible_moves[:8]
+        if len(possible_moves) > 15:
+            possible_moves = possible_moves[:15]
         
         alpha = float('-inf')
         beta = float('inf')
         
         for move in possible_moves:
             board_state[self.index(move[0], move[1])] = ai_player
-            score = self.minimax(board_state, MAX_DEPTH - 1, alpha, beta, False, ai_player)
+            score = self.minimax(board_state, MAX_DEPTH - 3, alpha, beta, False, ai_player)
             board_state[self.index(move[0], move[1])] = Cell.EMPTY
             
             if score >= best_score:
@@ -479,8 +664,9 @@ class GomokuGame:
         best_move = self.get_best_move(self.board, self.computer_color)
         if best_move[0] != -1:
             self.board[self.index(best_move[0], best_move[1])] = self.computer_color
+            self.last_move = best_move
             
-            if self.check_win(self.board, self.computer_color):
+            if self.check_win_fast(self.board, self.computer_color, best_move[0], best_move[1]):
                 self.winner = self.computer_color
                 self.game_ended = True
                 self.state = GameState.GAME_OVER
@@ -548,8 +734,9 @@ class GomokuGame:
                 idx = self.index(r, c)
                 if self.board[idx] == Cell.EMPTY:
                     self.board[idx] = self.human_color
+                    self.last_move = (r, c)
                     
-                    if self.check_win(self.board, self.human_color):
+                    if self.check_win_fast(self.board, self.human_color, r, c):
                         self.winner = self.human_color
                         self.game_ended = True
                         self.state = GameState.GAME_OVER
@@ -732,8 +919,8 @@ class GomokuGame:
         # Computer's turn indicator
         if not self.player_turn and not self.game_ended:
             self.pen.penup()
-            self.pen.goto(0, WIN_H/2 - 60)
-            self.pen.color(ORANGE_COLOR)
+            self.pen.goto(0, WIN_H/2 - 50)
+            self.pen.color(BLACK_COLOR)
             self.pen.write("Computer's Turn...", align="center", font=("Google Sans Flex", 20, "bold"))
     
     def draw_paused_overlay(self):
